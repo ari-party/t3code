@@ -1,6 +1,8 @@
 import {
   EnvironmentId,
+  IssueOperationError,
   IssueTrackerKind,
+  PLAIN_ISSUE_LINK_TRACKER,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
@@ -167,14 +169,22 @@ const makeHarness = Effect.fn("makeIssuesToolkitHarness")(function* (
             scope: "t3tools/t3code",
           }),
         resolveUrl: (url) =>
-          Effect.succeed({
-            projectId: PROJECT_ID,
-            tracker: GITHUB,
-            host: "github.com",
-            scope: "t3tools/t3code",
-            key: url.split("/").at(-1)!,
-            writable: true,
-          }),
+          url.startsWith("https://github.com/")
+            ? Effect.succeed({
+                projectId: PROJECT_ID,
+                tracker: GITHUB,
+                host: "github.com",
+                scope: "t3tools/t3code",
+                key: url.split("/").at(-1)!,
+                writable: true,
+              })
+            : Effect.fail(
+                new IssueOperationError({
+                  operation: "resolveUrl",
+                  reason: "not-found",
+                  detail: "This is not a recognised issue URL.",
+                }),
+              ),
       }),
     Layer.mock(ThreadIssueService.ThreadIssueService)({
       link: (input) =>
@@ -403,6 +413,50 @@ describe("issue toolkit handlers", () => {
           source: "agent",
         },
       ]);
+    }),
+  );
+
+  it.effect("links a URL no tracker recognises as a plain link and unlinks it by key", () =>
+    Effect.gen(function* () {
+      const url = "https://app.plane.so/acme/browse/ABC-123/";
+      const harness = yield* makeHarness();
+      const result = yield* harness.call("link_issue", { url });
+      expect(result).toEqual({
+        projectId: PROJECT_ID,
+        tracker: PLAIN_ISSUE_LINK_TRACKER,
+        host: "app.plane.so",
+        scope: "app.plane.so",
+        key: url,
+        url,
+        alreadyLinked: false,
+      });
+      expect((yield* Ref.get(harness.links))[0]).toMatchObject({
+        url,
+        displayKey: "ABC-123",
+        title: "app.plane.so",
+        source: "agent",
+      });
+
+      const linked = yield* makeHarness([
+        {
+          tracker: PLAIN_ISSUE_LINK_TRACKER,
+          host: "app.plane.so",
+          scope: "app.plane.so",
+          key: url,
+          projectId: PROJECT_ID,
+          url,
+          source: "agent",
+          linkedAt: "2026-08-10T00:00:00.000Z",
+          displayKey: "ABC-123",
+          title: "app.plane.so",
+        },
+      ]);
+      const unlinked = yield* linked.call("unlink_issue", { key: "ABC-123" });
+      expect(unlinked).toMatchObject({ key: url, url, wasLinked: true });
+
+      // a non-web url is still refused
+      const refused = yield* harness.call("link_issue", { url: "mailto:a@b.c" }).pipe(Effect.flip);
+      expect(refused).toMatchObject({ _tag: "IssueOperationError", reason: "not-found" });
     }),
   );
 
