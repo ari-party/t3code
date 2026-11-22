@@ -1171,7 +1171,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         }
       >
         <IssueIcon aria-hidden className={cn("size-3 shrink-0", issueStatus?.toneClassName)} />
-        <span className="max-w-16 truncate text-xs font-normal text-secondary-label tabular-nums">
+        <span className="max-w-24 truncate text-xs font-normal text-secondary-label tabular-nums">
           {issueCount === 1 ? firstIssue.displayKey : issueCount}
         </span>
       </TooltipTrigger>
