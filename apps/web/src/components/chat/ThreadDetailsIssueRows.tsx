@@ -1,10 +1,12 @@
 import {
   isPlainIssueLink,
+  plainIssueLinkSiteName,
   threadIssueKeyOf,
   type ScopedThreadRef,
   type ThreadIssueLink,
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { useGT } from "gt-react";
 import { MessageSquareIcon } from "lucide-react";
 import { useState, type MouseEvent } from "react";
@@ -19,6 +21,7 @@ import {
   issueStatePresentation,
   issueTrackerPresentation,
 } from "../issue/issuePresentation";
+import { FaviconImage } from "../preview/PreviewFaviconIcon";
 import {
   PULL_REQUEST_ROW_CLASS,
   PULL_REQUEST_ROW_NUMBER_CLASS,
@@ -47,7 +50,8 @@ function LinkedIssueRow({
   const trackerPresentation = issueTrackerPresentation(link.tracker);
   const state = detail === null ? null : issueStatePresentation(detail.state);
   const Icon = state?.Icon ?? IssueGlyph.issue;
-  const title = detail?.title ?? link.title;
+  const isPlain = isPlainIssueLink(link);
+  const title = detail?.title ?? (isPlain ? plainIssueLinkSiteName(link.host) : link.title);
   const anchorProps = {
     href: link.url,
     target: "_blank",
@@ -56,20 +60,29 @@ function LinkedIssueRow({
     onClick: (event: MouseEvent<HTMLElement>) => {
       event.stopPropagation();
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (isPlainIssueLink(link)) return;
+      if (isPlain) return;
       if (configs.get(threadRef.environmentId)?.environment.capabilities.issues !== true) return;
       event.preventDefault();
       useRightPanelStore.getState().openIssue(threadRef, link);
       onOpen?.();
     },
   };
-  const glyph = (
+  const issueGlyph = (
     <Icon
       aria-hidden={state === null ? true : undefined}
       role={state === null ? undefined : "img"}
       aria-label={state?.label}
       className={cn("size-4 shrink-0", state?.toneClassName ?? "text-muted-foreground")}
     />
+  );
+  const glyph = isPlain ? (
+    <FaviconImage
+      sources={[faviconUrlForOrigin(link.url)]}
+      fallback={issueGlyph}
+      className="size-4 shrink-0 rounded-sm"
+    />
+  ) : (
+    issueGlyph
   );
   const comments =
     detail !== null && detail.commentCount > 0 ? (
@@ -84,7 +97,7 @@ function LinkedIssueRow({
         <span aria-hidden>{detail.commentCount}</span>
       </span>
     ) : null;
-  const trackerIcon = (
+  const trackerIcon = isPlain ? null : (
     <trackerPresentation.Icon
       role="img"
       aria-label={trackerPresentation.providerName}
