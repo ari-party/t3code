@@ -8,7 +8,12 @@ import {
 } from "@t3tools/client-runtime/state/issues";
 import { useAtomValue } from "@effect/atom-react";
 import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, IssueState, ThreadIssueLink } from "@t3tools/contracts";
+import {
+  isPlainIssueLink,
+  type EnvironmentId,
+  type IssueState,
+  type ThreadIssueLink,
+} from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
@@ -34,8 +39,9 @@ export function useLinkedIssueDetail(
   mountScope?: "sidebar" | "thread-details" | "linked-items" | "sidebar-tooltip",
 ) {
   const configs = useServerConfigs();
+  const isTracked = link !== undefined && !isPlainIssueLink(link);
   return useEnvironmentQuery(
-    link && configs.get(environmentId)?.environment.capabilities.issues === true
+    isTracked && configs.get(environmentId)?.environment.capabilities.issues === true
       ? issueEnvironment.detail({ environmentId, input: linkedIssueRef(link) }, mountScope)
       : null,
   ).data;
@@ -48,10 +54,11 @@ export function useSidebarLinkedIssueState(
   links: ReadonlyArray<ThreadIssueLink> | undefined,
 ) {
   const configs = useServerConfigs();
+  const trackedLinks = links?.filter((link) => !isPlainIssueLink(link));
   const aggregate =
-    links?.length && configs.get(environmentId)?.environment.capabilities.issues === true
+    trackedLinks?.length && configs.get(environmentId)?.environment.capabilities.issues === true
       ? Atom.make((get): IssueState | null => {
-          const states = links.map(
+          const states = trackedLinks.map(
             (link) =>
               selectEnvironmentQueryData(
                 get(
