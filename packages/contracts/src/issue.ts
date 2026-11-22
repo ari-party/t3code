@@ -557,6 +557,12 @@ export function threadIssueKeysEqual(left: ThreadIssueKey, right: ThreadIssueKey
   return threadIssueKeyOf(left) === threadIssueKeyOf(right);
 }
 
+export const PLAIN_ISSUE_LINK_TRACKER = IssueTrackerKind.make("link");
+
+export function isPlainIssueLink(key: Pick<ThreadIssueKey, "tracker">): boolean {
+  return key.tracker === PLAIN_ISSUE_LINK_TRACKER;
+}
+
 /** The threads an issue is linked to, most recently active first. */
 export const IssueLinkedThreadsResult = Schema.Struct({
   threads: Schema.Array(
