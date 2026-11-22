@@ -592,6 +592,12 @@ export function isPlainIssueLink(key: Pick<ThreadIssueKey, "tracker">): boolean 
   return key.tracker === PLAIN_ISSUE_LINK_TRACKER;
 }
 
+export function plainIssueLinkSiteName(host: string): string {
+  const hostname = host.split(":")[0] ?? host;
+  const name = hostname.split(".").at(-2) ?? hostname;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 /** The threads an issue is linked to, most recently active first. */
 export const IssueLinkedThreadsResult = Schema.Struct({
   threads: Schema.Array(
