@@ -1,6 +1,9 @@
 import {
+  isPlainIssueLink,
+  PLAIN_ISSUE_LINK_TRACKER,
   threadIssueKeysEqual,
   type IssueDetail,
+  type IssueOperationError,
   type IssueRef,
   type OrchestrationV2ThreadShell,
   type ProjectId,
@@ -53,6 +56,37 @@ function listThreadIssues(
       title: link.title,
     })),
   };
+}
+
+function isUnrecognisedIssueUrl(error: IssueOperationError, url: string) {
+  if (!URL.canParse(url)) return false;
+
+  const protocol = new URL(url).protocol;
+  const isWebUrl = protocol === "https:" || protocol === "http:";
+  return isWebUrl && error.operation === "resolveUrl" && error.reason === "not-found";
+}
+
+function plainLinkOf(url: string, key: string | undefined) {
+  const parsed = new URL(url);
+  const host = parsed.host.toLowerCase();
+  const lastSegment = parsed.pathname.split("/").findLast((segment) => segment.length > 0);
+
+  return {
+    tracker: PLAIN_ISSUE_LINK_TRACKER,
+    host,
+    scope: host,
+    key: url,
+    displayKey: key ?? lastSegment ?? host,
+  };
+}
+
+function findPlainLink(
+  thread: Pick<OrchestrationV2ThreadShell, "issues">,
+  input: { readonly url?: string | undefined; readonly key?: string | undefined },
+) {
+  return (thread.issues ?? []).find(
+    (link) => isPlainIssueLink(link) && (link.url === input.url || link.displayKey === input.key),
+  );
 }
 
 const make = Effect.gen(function* () {
@@ -158,6 +192,55 @@ const make = Effect.gen(function* () {
   const writesThread = <P extends { readonly threadId?: ThreadId | undefined }, A, E, R>(
     handle: (params: P) => Effect.Effect<A, E, R>,
   ) => McpToolAccess.writesThreads((params: P) => [params.threadId], handle);
+
+  const linkTracked = Effect.fn("IssuesToolkit.linkTracked")(function* (
+    thread: OrchestrationV2ThreadShell,
+    input: IssueTargetInput,
+  ) {
+    const target: ResolvedTarget = yield* resolveTarget({
+      ...input,
+      projectId: input.projectId ?? thread.projectId,
+    });
+    const issue = target.issue ?? (yield* issues.linkMetadata(refOf(target)));
+    const url = target.url ?? issue.url;
+    const { alreadyLinked } = yield* threadIssues
+      .link({
+        threadId: thread.id,
+        ref: refOf(target),
+        url,
+        displayKey: issue.displayKey,
+        title: issue.title,
+        source: "agent",
+      })
+      .pipe(Effect.catchCause(linkFailure));
+    return { ...identityOf(target), url, alreadyLinked };
+  });
+
+  const linkPlain = Effect.fn("IssuesToolkit.linkPlain")(function* (
+    thread: OrchestrationV2ThreadShell,
+    url: string,
+    key: string | undefined,
+  ) {
+    const plain = plainLinkOf(url, key);
+    const ref = {
+      projectId: thread.projectId,
+      tracker: plain.tracker,
+      host: plain.host,
+      scope: plain.scope,
+      key: plain.key,
+    };
+    const { alreadyLinked } = yield* threadIssues
+      .link({
+        threadId: thread.id,
+        ref,
+        url,
+        displayKey: plain.displayKey,
+        title: plain.host,
+        source: "agent",
+      })
+      .pipe(Effect.catchCause(linkFailure));
+    return { ...ref, url, alreadyLinked };
+  });
 
   return {
     list_issues: McpToolAccess.reads((input) =>
@@ -270,29 +353,41 @@ const make = Effect.gen(function* () {
     link_issue: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(input.threadId);
-        const target: ResolvedTarget = yield* resolveTarget({
-          ...input,
-          projectId: input.projectId ?? thread.projectId,
-        });
-        // Reading the issue proves it exists and names it for the thread's row.
-        const issue = target.issue ?? (yield* issues.linkMetadata(refOf(target)));
-        const url = target.url ?? issue.url;
-        const { alreadyLinked } = yield* threadIssues
-          .link({
-            threadId: thread.id,
-            ref: refOf(target),
-            url,
-            displayKey: issue.displayKey,
-            title: issue.title,
-            source: "agent",
-          })
-          .pipe(Effect.catchCause(linkFailure));
-        return { ...identityOf(target), url, alreadyLinked };
+
+        return yield* linkTracked(thread, input).pipe(
+          Effect.catchTags({
+            IssueOperationError: (error) => {
+              const url = input.url;
+              if (url === undefined || !isUnrecognisedIssueUrl(error, url)) {
+                return Effect.fail(error);
+              }
+
+              return linkPlain(thread, url, input.key);
+            },
+          }),
+        );
       }),
     ),
     unlink_issue: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(input.threadId);
+        const plain = findPlainLink(thread, input);
+
+        if (plain !== undefined) {
+          const { wasLinked } = yield* threadIssues
+            .unlink({ threadId: thread.id, key: plain })
+            .pipe(Effect.catchCause(linkFailure));
+          return {
+            projectId: plain.projectId,
+            tracker: plain.tracker,
+            host: plain.host,
+            scope: plain.scope,
+            key: plain.key,
+            url: plain.url,
+            wasLinked,
+          };
+        }
+
         const target = yield* resolveTarget({
           ...input,
           projectId: input.projectId ?? thread.projectId,
