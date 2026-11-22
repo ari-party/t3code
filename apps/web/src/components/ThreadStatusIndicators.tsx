@@ -548,7 +548,7 @@ export function ThreadLinkBadge({
     >
       <span className={cn("contents font-normal text-xs tabular-nums", toneClassName)}>
         <Icon aria-hidden className="size-3 shrink-0" />
-        <span className="max-w-16 truncate">{text}</span>
+        <span className="max-w-24 truncate">{text}</span>
       </span>
     </SharedTooltipTrigger>
   );
