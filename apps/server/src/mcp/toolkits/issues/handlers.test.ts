@@ -433,7 +433,7 @@ describe("issue toolkit handlers", () => {
       expect((yield* Ref.get(harness.links))[0]).toMatchObject({
         url,
         displayKey: "ABC-123",
-        title: "app.plane.so",
+        title: "Plane",
         source: "agent",
       });
 
@@ -448,7 +448,7 @@ describe("issue toolkit handlers", () => {
           source: "agent",
           linkedAt: "2026-08-10T00:00:00.000Z",
           displayKey: "ABC-123",
-          title: "app.plane.so",
+          title: "Plane",
         },
       ]);
       const unlinked = yield* linked.call("unlink_issue", { key: "ABC-123" });
