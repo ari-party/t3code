@@ -1,4 +1,9 @@
-import { threadIssueKeyOf, type ScopedThreadRef, type ThreadIssueLink } from "@t3tools/contracts";
+import {
+  isPlainIssueLink,
+  threadIssueKeyOf,
+  type ScopedThreadRef,
+  type ThreadIssueLink,
+} from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { useGT } from "gt-react";
 import { MessageSquareIcon } from "lucide-react";
@@ -51,6 +56,7 @@ function LinkedIssueRow({
     onClick: (event: MouseEvent<HTMLElement>) => {
       event.stopPropagation();
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (isPlainIssueLink(link)) return;
       if (configs.get(threadRef.environmentId)?.environment.capabilities.issues !== true) return;
       event.preventDefault();
       useRightPanelStore.getState().openIssue(threadRef, link);
