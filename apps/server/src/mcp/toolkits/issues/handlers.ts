@@ -1,6 +1,7 @@
 import {
   isPlainIssueLink,
   PLAIN_ISSUE_LINK_TRACKER,
+  plainIssueLinkSiteName,
   threadIssueKeysEqual,
   type IssueDetail,
   type IssueOperationError,
@@ -235,7 +236,7 @@ const make = Effect.gen(function* () {
         ref,
         url,
         displayKey: plain.displayKey,
-        title: plain.host,
+        title: plainIssueLinkSiteName(plain.host),
         source: "agent",
       })
       .pipe(Effect.catchCause(linkFailure));
